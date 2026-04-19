@@ -1,41 +1,87 @@
-import pygame
+from ursina import *
 
-class Player(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()  # Викликаємо конструктор класу Sprite
-        self.run_images = [pygame.image.load("assets/player_run1.png").convert_alpha(),
-                           pygame.image.load("assets/player_run2.png").convert_alpha()]
-        self.jump_image = pygame.image.load("assets/player_jump.png").convert_alpha()
-        self.index = 0
-        self.image = self.run_images[self.index]
-        self.rect = self.image.get_rect()
-        self.rect.topleft = (x, y)
+class Player(Entity):
+    def __init__(self, position=(0, 3, 0)):
+        super().__init__(
+            model='cube',
+            color=color.azure,
+            scale=(0.8, 1.8, 0.8),
+            position=position,
+            collider='box'
+        )
 
-        self.vel_y = 0
-        self.is_jumping = False
-        self.gravity = 0.8
+        # ⚙️ рух
+        self.speed = 5
+        self.jump_force = 6
+        self.gravity = 20
+        self.velocity_y = 0
+        self.grounded = False
+
+        # 🖱️ камера
+        self.sensitivity = 100
+        self.pitch = 0
+
+        camera.parent = self
+        camera.position = (0, 1.6, 0)
 
     def update(self):
-        # Анімація бігу
-        if not self.is_jumping:
-            self.index += 0.1
-            if self.index >= len(self.run_images):
-                self.index = 0
-            self.image = self.run_images[int(self.index)]
+
+        # 🖱️ поворот
+        self.rotation_y += mouse.velocity[0] * self.sensitivity
+
+        self.pitch -= mouse.velocity[1] * self.sensitivity
+        self.pitch = clamp(self.pitch, -80, 80)
+
+        camera.rotation_x = self.pitch
+
+        # 🎮 рух
+        move = Vec3(
+            held_keys['d'] - held_keys['a'],
+            0,
+            held_keys['w'] - held_keys['s']
+        )
+
+        direction = (self.right * move.x + self.forward * move.z)
+        direction.y = 0
+
+        if direction.length() > 0:
+            self.try_move(direction.normalized())
+
+        self.apply_gravity()
+
+    # 🧱 рух
+    def try_move(self, direction):
+        hit = raycast(
+            self.world_position + Vec3(0, 1, 0),
+            direction,
+            distance=0.5,
+            ignore=(self,)
+        )
+
+        if not hit.hit:
+            self.position += direction * self.speed * time.dt
+
+    # 🌍 гравітація (СТАБІЛЬНА)
+    def apply_gravity(self):
+        hit = raycast(
+            self.world_position + Vec3(0, 0.1, 0),
+            Vec3(0, -1, 0),
+            distance=1.1,
+            ignore=(self,)
+        )
+
+        if hit.hit:
+            if self.velocity_y <= 0:
+                self.grounded = True
+                self.velocity_y = 0
+                self.y = hit.world_point.y + 1
         else:
-            self.image = self.jump_image
+            self.grounded = False
+            self.velocity_y -= self.gravity * time.dt
+            self.y += self.velocity_y * time.dt
 
-        # Додаємо гравітацію
-        self.vel_y += self.gravity
-        self.rect.y += self.vel_y
-
-        # Перевірка на падіння
-        if self.rect.bottom > 500:  # Зупиняємо падіння на землі
-            self.rect.bottom = 500
-            self.is_jumping = False
-            self.vel_y = 0
-
-    def jump(self):
-        if not self.is_jumping:
-            self.is_jumping = True
-            self.vel_y = -15  # сила стрибка
+    # 🦘 стрибок
+    def input(self, key):
+        if key == 'space' and self.grounded:
+            self.velocity_y = self.jump_force
+            self.grounded = False

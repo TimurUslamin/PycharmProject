@@ -1,59 +1,105 @@
-import pygame
+from ursina import *
 from player import Player
-from platform import Platform
 
-# Ініціалізація Pygame
-pygame.init()
-WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("2D Паркур Гра")
+app = Ursina()
 
-clock = pygame.time.Clock()
-FPS = 60
+Sky()
+DirectionalLight().look_at(Vec3(1, -1, -1))
+AmbientLight(color=color.white)
 
-# Фонове зображення
-background = pygame.image.load("assets/background.png").convert()
+# 🟢 стартовий режим (меню)
+mouse.locked = False
+mouse.visible = True
+window.cursor_visible = True
 
-# Створення групи спрайтів для гравця і платформ
-player_group = pygame.sprite.Group()
-platform_group = pygame.sprite.Group()
 
-# Створюємо об'єкт гравця і додаємо його до групи
-player = Player(100, 400)
-player_group.add(player)
+# 🎯 CROSSHAIR (+)
+crosshair = Text(
+    "+",
+    parent=camera.ui,
+    scale=2,
+    origin=(0, 0),
+    position=(0, 0),
+    color=color.white
+)
+crosshair.enabled = False
 
-# Створюємо платформу і додаємо її до групи
-ground = Platform(0, 500, WIDTH, 100)
-platform_group.add(ground)
 
-running = True
-while running:
-    clock.tick(FPS)
+# 🧍 гравець
+player = Player(position=(0, 3, 0))
+player.enabled = False
 
-    # Обробка подій
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                player.jump()
 
-    # Оновлення групи спрайтів
-    player_group.update()
+# 🌍 блок
+class Block(Button):
+    def __init__(self, position=(0, 0, 0), col=color.green):
+        super().__init__(
+            model='cube',
+            position=position,
+            color=col,
+            collider='box',
+            parent=scene
+        )
 
-    # Перевірка на зіткнення гравця з платформою
-    hits = pygame.sprite.spritecollide(player, platform_group, False)
-    if hits:
-        if player.vel_y > 0:  # Якщо гравець падає
-            player.rect.bottom = hits[0].rect.top
-            player.vel_y = 0
-            player.is_jumping = False
+    def input(self, key):
+        if self.hovered:
+            if key == 'left mouse down':
+                destroy(self)
 
-    # Малюємо на екрані
-    screen.blit(background, (0, 0))  # Малюємо фон
-    platform_group.draw(screen)  # Малюємо платформи
-    player_group.draw(screen)  # Малюємо гравця
+            if key == 'right mouse down':
+                Block(position=self.position + mouse.normal, col=color.green)
 
-    pygame.display.flip()  # Оновлюємо екран
 
-pygame.quit()
+# 🌍 світ
+WORLD_SIZE = 10
+
+for x in range(-WORLD_SIZE, WORLD_SIZE):
+    for z in range(-WORLD_SIZE, WORLD_SIZE):
+        Block(position=(x, 0, z))
+
+
+# 🎮 МЕНЮ
+menu = Entity(parent=camera.ui)
+
+# 🌑 тінь тексту
+title_shadow = Text(
+    "MY GAME",
+    parent=menu,
+    scale=3,
+    origin=(0, 0),
+    position=(0.01, 0.24),
+    color=color.black
+)
+
+# ✨ основний текст
+title = Text(
+    "MY GAME",
+    parent=menu,
+    scale=3,
+    origin=(0, 0),
+    position=(0, 0.25),
+    color=color.azure
+)
+
+
+def start_game():
+    menu.disable()
+    player.enabled = True
+
+    mouse.locked = True
+    mouse.visible = False
+    window.cursor_visible = False
+
+    crosshair.enabled = True
+
+
+Button(
+    text="START",
+    parent=menu,
+    scale=(0.3, 0.1),
+    y=-0.1,
+    color=color.azure,
+    on_click=start_game
+)
+
+app.run()
